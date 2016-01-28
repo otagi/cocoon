@@ -26,18 +26,18 @@ module Cocoon
         name, f, html_options = *args
         html_options ||= {}
 
-        is_dynamic = f.object.new_record?
+        is_dynamic = object(f).new_record?
 
         classes = []
         classes << "remove_fields"
         classes << (is_dynamic ? 'dynamic' : 'existing')
-        classes << 'destroyed' if f.object.marked_for_destruction?
+        classes << 'destroyed' if object(f).marked_for_destruction?
         html_options[:class] = [html_options[:class], classes.join(' ')].compact.join(' ')
 
         wrapper_class = html_options.delete(:wrapper_class)
         html_options[:'data-wrapper-class'] = wrapper_class if wrapper_class.present?
 
-        hidden_field_tag("#{f.object_name}[_destroy]", f.object._destroy) + link_to(name, '#', html_options)
+        hidden_field_tag("#{f.object_name}[_destroy]", object(f)._destroy) + link_to(name, '#', html_options)
       end
     end
 
@@ -108,7 +108,7 @@ module Cocoon
     # will create new Comment with author "Admin"
 
     def create_object(f, association, force_non_association_create=false)
-      assoc = f.object.class.reflect_on_association(association)
+      assoc = object(f).class.reflect_on_association(association)
 
       assoc ? create_object_on_association(f, association, assoc, force_non_association_create) : create_object_on_non_association(f, association)
     end
@@ -119,10 +119,14 @@ module Cocoon
 
     private
 
+    def object(f)
+      f.object.respond_to?(:model) ? f.object.model : f.object
+    end
+
     def create_object_on_non_association(f, association)
-      builder_method = %W{build_#{association} build_#{association.to_s.singularize}}.select { |m| f.object.respond_to?(m) }.first
-      return f.object.send(builder_method) if builder_method
-      raise "Association #{association} doesn't exist on #{f.object.class}"
+      builder_method = %W{build_#{association} build_#{association.to_s.singularize}}.select { |m| object(f).respond_to?(m) }.first
+      return object(f).send(builder_method) if builder_method
+      raise "Association #{association} doesn't exist on #{object(f).class}"
     end
 
     def create_object_on_association(f, association, instance, force_non_association_create)
@@ -133,11 +137,11 @@ module Cocoon
 
         # assume ActiveRecord or compatible
         if instance.collection?
-          assoc_obj = f.object.send(association).build
-          f.object.send(association).delete(assoc_obj)
+          assoc_obj = object(f).send(association).build
+          object(f).send(association).delete(assoc_obj)
         else
-          assoc_obj = f.object.send("build_#{association}")
-          f.object.send(association).delete
+          assoc_obj = object(f).send("build_#{association}")
+          object(f).send(association).delete
         end
 
         assoc_obj = assoc_obj.dup if assoc_obj.frozen?
